@@ -1,0 +1,15 @@
+version: '3'
+services:
+  jsonrpc-proxy:
+    image: "harbor.staking.ankr.com/stkr/go-jsonrpc-proxy:${TAG}"
+    environment:
+      PORT: 48080
+    volumes:
+      - /etc/foundationdb/fdb.cluster:/etc/foundationdb/fdb.cluster:ro
+      - /etc/foundationdb/tls:/etc/foundationdb/tls:ro
+    restart: always
+    ports:
+      - "0.0.0.0:6572:6572"
+      - "0.0.0.0:38080:38080"
+    deploy:
+      replicas: 1

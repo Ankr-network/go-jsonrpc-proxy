@@ -1,0 +1,343 @@
+version: 2.1
+
+global-variables: &global-variables
+  HARBOR_URL: harbor.staking.ankr.com
+
+build-docker-template: &build-docker-template
+  working_directory: /build
+  docker:
+    - image: docker:18.06.3-ce-git
+  steps:
+    - checkout
+    - setup_remote_docker:
+        docker_layer_caching: true
+    - attach_workspace:
+        at: '.'
+    - run:
+        name: Docker Build & Publish
+        environment:
+          <<: *global-variables
+        command: |
+          docker build -t app-${APP_NAME:-build} $CONTEXT_PATH -f ${DOCKER_FILE:-Dockerfile} --build-arg BUILDER_IMAGE=$FDB_VERSION_GO_BINARIES_REPO --build-arg GITHUB_TOKEN=$GITHUB_TOKEN
+          docker login $HARBOR_URL -u $HARBOR_USERNAME -p $HARBOR_PASSWORD
+          docker tag app-${APP_NAME:-build} $HARBOR_URL/$HARBOR_PROJECT/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1-${APP_NAME:-build}
+          docker push $HARBOR_URL/$HARBOR_PROJECT/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1-${APP_NAME:-build}
+
+test-template: &test-template
+  docker:
+    - image: cimg/base:2022.03
+  steps:
+    - checkout
+    - run: mkdir -p /tmp/test-results
+    - setup_remote_docker:
+        docker_layer_caching: true
+    - attach_workspace:
+        at: '.'
+    - run:
+        name: Run Tests
+        context:
+          - ankrscan_harbor_prod
+        environment:
+          <<: *global-variables
+        command: |
+          export TAG=$CIRCLE_SHA1-${APP_NAME:-build}
+          docker login $HARBOR_URL -u $HARBOR_USERNAME -p $HARBOR_PASSWORD
+          docker-compose -f docker-compose.test.yaml up --build --abort-on-container-exit
+          docker cp `docker-compose --log-level ERROR ps -q jsonrpc-proxy`:/tmp/test-results /tmp/
+    - store_test_results:
+        path: /tmp/test-results
+
+lint-template: &lint-template
+  docker:
+    - image: cimg/base:2022.11
+  steps:
+    - checkout
+    - setup_remote_docker:
+        docker_layer_caching: true
+    - attach_workspace:
+        at: '.'
+    - run:
+        name: Run Linters
+        context:
+          - ankrscan_harbor_prod
+        environment:
+          <<: *global-variables
+        command: |
+          export TOKEN_INDEXER_DOCKER_IMAGE=$HARBOR_URL/$HARBOR_PROJECT/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1-${APP_NAME:-build}
+          docker login $HARBOR_URL -u $HARBOR_USERNAME -p $HARBOR_PASSWORD
+          docker run -it --rm $TOKEN_INDEXER_DOCKER_IMAGE bash -c "wget -O- -nv https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.50.1 && ./bin/golangci-lint --version && ./bin/golangci-lint run -v" 
+
+deploy-template: &deploy-template
+  docker:
+    - image: xozzslip/ubuntu-go
+  parameters:
+    fingerprint:
+      default: ""
+      type: string
+  steps:
+    - add_ssh_keys:
+        fingerprints:
+          - <<parameters.fingerprint>>
+    - checkout
+    - setup_remote_docker
+    - run:
+        context:
+          - ankrscan_harbor_prod
+          - ankrscan_ci_builds
+        name: Deploy To Host
+        environment:
+          <<: *global-variables
+        command: |
+          COMPOSE_PATH=/tmp/docker-compose-$CIRCLE_PROJECT_REPONAME-$CIRCLE_SHA1-${APP_NAME:-build}
+          env TAG=$CIRCLE_SHA1-${APP_NAME:-build} envsubst < docker-compose.yaml > $COMPOSE_PATH
+          export TOKEN_INDEXER_DOCKER_IMAGE=$HARBOR_URL/$HARBOR_PROJECT/$CIRCLE_PROJECT_REPONAME:$CIRCLE_SHA1-${APP_NAME:-build}
+          scp -o StrictHostKeyChecking=no $COMPOSE_PATH $SSH_USERNAME@$SSH_IP:$COMPOSE_PATH
+          ssh -o StrictHostKeyChecking=no -t $SSH_USERNAME@$SSH_IP "docker login '`echo $HARBOR_URL`' -u '`echo $HARBOR_USERNAME`' -p '`echo $HARBOR_PASSWORD`' && docker pull $TOKEN_INDEXER_DOCKER_IMAGE && docker stack deploy --with-registry-auth --compose-file '`echo $COMPOSE_PATH`' ankrscan"
+jobs:
+  build-docker-630:
+    environment:
+      CONTEXT_PATH: ./
+      DOCKER_FILE: ./Dockerfile
+      APP_NAME: 630
+      FDB_VERSION_GO_BINARIES_REPO: xozzslip/foundationdb630-go
+    <<: *build-docker-template
+  build-docker-700:
+    environment:
+      CONTEXT_PATH: ./
+      DOCKER_FILE: ./Dockerfile
+      APP_NAME: 700
+      FDB_VERSION_GO_BINARIES_REPO: redcuckoo/foundationdb700-go
+    <<: *build-docker-template
+  deploy-prod-amsterdam:
+    environment:
+      <<: *global-variables
+      ENVIRONMENT_NAME: prod
+      CHART_NAME: charts
+      KUBE_NAMESPACE: cloverscan-extractor-prod
+      APP_NAME: 630
+    <<: *deploy-template
+  deploy-prod-new-jersey:
+    environment:
+      <<: *global-variables
+      ENVIRONMENT_NAME: prod
+      CHART_NAME: charts
+      KUBE_NAMESPACE: cloverscan-extractor-prod
+      APP_NAME: 630
+    <<: *deploy-template
+  deploy-dev-new-york:
+    environment:
+      <<: *global-variables
+      ENVIRONMENT_NAME: prod
+      CHART_NAME: charts
+      KUBE_NAMESPACE: cloverscan-extractor-prod
+      APP_NAME: 630
+    <<: *deploy-template
+  deploy-dev-san-jose:
+    environment:
+      <<: *global-variables
+      ENVIRONMENT_NAME: prod
+      CHART_NAME: charts
+      KUBE_NAMESPACE: cloverscan-extractor-prod
+      APP_NAME: 630
+    <<: *deploy-template
+  deploy-dev-dallas:
+    environment:
+      <<: *global-variables
+      ENVIRONMENT_NAME: prod
+      CHART_NAME: charts
+      KUBE_NAMESPACE: cloverscan-extractor-prod
+      APP_NAME: 630
+    <<: *deploy-template
+  deploy-prod-frankfurt:
+    environment:
+      <<: *global-variables
+      ENVIRONMENT_NAME: prod
+      CHART_NAME: charts
+      KUBE_NAMESPACE: cloverscan-extractor-prod
+      APP_NAME: 630
+    <<: *deploy-template
+  deploy-prod-NA-san-jose-2:
+    environment:
+      <<: *global-variables
+      ENVIRONMENT_NAME: prod
+      CHART_NAME: charts
+      KUBE_NAMESPACE: cloverscan-extractor-prod
+      APP_NAME: 700
+    <<: *deploy-template
+  deploy-prod-NA-new-jersey-2:
+    environment:
+      <<: *global-variables
+      ENVIRONMENT_NAME: prod
+      CHART_NAME: charts
+      KUBE_NAMESPACE: cloverscan-extractor-prod
+      APP_NAME: 700
+    <<: *deploy-template
+  test:
+    environment:
+      <<: *global-variables
+      APP_NAME: 630
+    <<: *test-template
+  lint:
+    environment:
+      <<: *global-variables
+      APP_NAME: 630
+    <<: *lint-template
+
+workflow-build-template: &workflow-build-template
+  context: 
+    - ankrscan_harbor_prod
+    - ankrscan_ci_builds
+  filters:
+    branches:
+      only: [ develop, master, /^feature.*/ ]
+
+workflows:
+  build:
+    jobs:
+      - build-docker-630:
+          <<: *workflow-build-template
+      - build-docker-700:
+          <<: *workflow-build-template
+      - test:
+          context: ankrscan_harbor_prod
+          requires:
+            - build-docker-630
+      - lint:
+          context: ankrscan_harbor_prod
+          requires:
+            - build-docker-630
+      # deploy workflow (production)
+      - approve-deploy-amsterdam:
+          filters:
+            branches:
+              only: master
+          type: approval
+      - deploy-prod-amsterdam:
+          context:
+            - ankrscan_harbor_prod
+            - ankrscan_amsterdam_fdb_ssh
+          requires:
+            - approve-deploy-amsterdam
+            - build-docker-630
+            - test
+            - lint
+          filters:
+            branches:
+              only: master
+          fingerprint: "67:d3:e3:83:80:33:04:d2:6b:31:b2:e1:93:2c:81:13"
+      - approve-deploy-new-jersey:
+          filters:
+            branches:
+              only: master
+          type: approval
+      - deploy-prod-new-jersey:
+          context:
+            - ankrscan_harbor_prod
+            - ankrscan_new_jersey_fdb_ssh
+          requires:
+            - approve-deploy-new-jersey
+            - build-docker-630
+            - test
+            - lint
+          filters:
+            branches:
+              only: master
+          fingerprint: "c0:aa:cd:cc:da:09:71:5a:16:71:52:62:64:1a:f6:df"
+      - approve-deploy-new-york:
+          filters:
+            branches:
+              only: [ /^feature.*/, master ]
+          type: approval
+      - deploy-dev-new-york:
+          context:
+            - ankrscan_harbor_prod
+            - ankrscan_new_york_fdb_ssh
+          requires:
+            - approve-deploy-new-york
+            - build-docker-630
+          filters:
+            branches:
+              only: [ /^feature.*/, master ]
+          fingerprint: "00:d7:8d:2c:87:2f:f1:4d:36:37:dd:e9:5d:b3:d5:ac"
+      - approve-deploy-san-jose:
+          filters:
+            branches:
+              only: [ /^feature.*/, master ]
+          type: approval
+      - deploy-dev-san-jose:
+          context:
+            - ankrscan_harbor_prod
+            - ankrscan_san_jose_fdb_ssh
+          requires:
+            - approve-deploy-san-jose
+            - build-docker-630
+          filters:
+            branches:
+              only: [ /^feature.*/, master ]
+          fingerprint: "06:40:51:1e:a5:53:eb:a8:9d:45:30:41:81:c7:c6:7e"
+      - approve-deploy-dallas:
+          filters:
+            branches:
+              only: master
+          type: approval
+      - deploy-dev-dallas:
+          context:
+            - ankrscan_harbor_prod
+            - ankrscan_dallas_fdb_ssh
+          requires:
+            - approve-deploy-dallas
+            - build-docker-630
+          filters:
+            branches:
+              only: master
+          fingerprint: "b8:63:16:fb:be:6f:52:d8:ee:23:7a:92:6f:9d:38:fd"
+      - approve-deploy-frankfurt:
+          filters:
+            branches:
+              only: master
+          type: approval
+      - deploy-prod-frankfurt:
+          context:
+            - ankrscan_harbor_prod
+            - ankrscan_frankfurt_fdb_ssh
+          requires:
+            - approve-deploy-frankfurt
+            - build-docker-630
+            - test
+          filters:
+            branches:
+              only: master
+          fingerprint: "e4:3a:a1:8f:8f:a1:c8:a3:cc:80:4e:0a:0b:69:46:3b"
+      - approve-deploy-NA-san-jose-2:
+          filters:
+            branches:
+              only: master
+          type: approval
+      - deploy-prod-NA-san-jose-2:
+          context:
+            - ankrscan_harbor_prod
+            - ankrscan_na_sj2_fdb_ssh
+          requires:
+            - approve-deploy-NA-san-jose-2
+            - build-docker-700
+          filters:
+            branches:
+              only: master
+          fingerprint: "37:33:e8:3b:87:ee:2d:1f:8f:f2:03:9d:7d:c9:bd:99"
+      - approve-deploy-NA-new-jersey-2:
+          filters:
+            branches:
+              only: master
+          type: approval
+      - deploy-prod-NA-new-jersey-2:
+          context:
+            - ankrscan_harbor_prod
+            - ankrscan_na_nj2_fdb_ssh
+          requires:
+            - approve-deploy-NA-new-jersey-2
+            - build-docker-700
+          filters:
+            branches:
+              only: master
+          fingerprint: "a1:11:86:9e:0b:5a:3e:95:a0:2a:22:9d:a4:9a:11:ea"
+

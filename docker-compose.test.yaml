@@ -1,0 +1,21 @@
+version: '3'
+services:
+  jsonrpc-proxy:
+    image: "harbor.staking.ankr.com/stkr/go-jsonrpc-proxy:${TAG}"
+    volumes:
+      - fdb:/etc/foundationdb:ro
+      - fdbcli:/usr/bin/foundationdb:ro
+    command: >
+      bash -c "cp /etc/foundationdb/fdb.cluster ./fdb.cluster
+      && /usr/bin/foundationdb/fdbcli --exec 'configure new single ssd'
+      && go install gotest.tools/gotestsum@latest
+      && gotestsum --format standard-verbose --junitfile /tmp/test-results/gotestsum-report.xml"
+
+networks:
+  default:
+
+volumes:
+  fdb:
+    driver: local
+  fdbcli:
+    driver: local

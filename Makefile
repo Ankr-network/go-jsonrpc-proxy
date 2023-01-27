@@ -1,35 +1,12 @@
-ORG_NAME := Ankr-network
-REPO_NAME := go-jsonrpc-proxy
-PKG_ROOT := github.com/${ORG_NAME}/$(REPO_NAME)
-PKG_LIST := go list ${PKG_ROOT}/...
-PKG_GO_JSONRPC_PROXY := ${PKG_ROOT}/cmd
-CMD_DIR := ./cmd
+BUILD_DIR ?= build
+BUILD_PACKAGE ?= ./cmd
 
-.PHONY: all lint vet test go-jsonrpc-proxy
+BINARY_NAME ?= go-jsonrpc-proxy
+VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD)
+COMMIT_HASH ?= $(shell git rev-parse --short HEAD 2>/dev/null)
+BUILD_DATE ?= $(shell date +%FT%T%z)
+LDFLAGS += -s -w -X github.com/Ankr-network/ankrscan-utils/pkg/buildinfo.version=${VERSION} -X github.com/Ankr-network/ankrscan-utils/pkg/buildinfo.commitHash=${COMMIT_HASH} -X github.com/Ankr-network/ankrscan-utils/pkg/buildinfo.buildDate=${BUILD_DATE}
 
-.EXPORT_ALL_VARIABLES:
-
-GO111MODULE=on
-
-all: lint vet test go-jsonrpc-proxy
-
-vet:
-	@go vet $(shell $(PKG_LIST))
-
-# Lint the files
-lint:
-	@golint -set_exit_status $(shell $(PKG_LIST))
-
-# Run unit tests
-test:
-	@go test -v -short -count=1 $(shell $(PKG_LIST))
-
-go-jsonrpc-proxy: $(CMD_DIR)/go-jsonrpc-proxy
-
-$(CMD_DIR)/go-jsonrpc-proxy:
-	@echo "Building $@..."
-	@go build -i -o $(CMD_DIR)/go-jsonrpc-proxy -v $(PKG_GO_JSONRPC_PROXY)
-	@chmod u+x $(CMD_DIR)/go-jsonrpc-proxy
-
-clean:
-	@rm -df $(CMD_DIR)/go-jsonrpc-proxy
+.PHONY: build
+build:
+	go build ${GOARGS} -tags "${GOTAGS}" -ldflags "${LDFLAGS}" -o ${BUILD_DIR}/${BINARY_NAME} ${BUILD_PACKAGE}
