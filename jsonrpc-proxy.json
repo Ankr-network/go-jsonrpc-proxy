@@ -2,17 +2,16 @@
   "base-url": "/",
   "methods": [
     {
-      "name": "searchrawtransactions",
+      "name": "rpc_getProgramAccounts",
       "proxy-to": [
-        "http://localhost:2021",
-        "http://localhost:2022"
+        "http://solana-indexer:38080"
       ],
       "rate-limit": 10
     },
     {
       "name": ".*",
       "proxy-to": [
-        "http://localhost:2023"
+        "https://rpc.ankr.com/solana"
       ],
       "rate-limit": 100
     }
