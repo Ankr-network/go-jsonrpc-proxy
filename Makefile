@@ -1,4 +1,4 @@
-ORG_NAME := AxLabs
+ORG_NAME := Ankr-network
 REPO_NAME := go-jsonrpc-proxy
 PKG_ROOT := github.com/${ORG_NAME}/$(REPO_NAME)
 PKG_LIST := go list ${PKG_ROOT}/...

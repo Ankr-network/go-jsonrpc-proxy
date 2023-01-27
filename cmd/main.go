@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/AxLabs/go-jsonrpc-proxy/config"
-	"github.com/AxLabs/go-jsonrpc-proxy/server"
+	"github.com/Ankr-network/go-jsonrpc-proxy/config"
+	"github.com/Ankr-network/go-jsonrpc-proxy/server"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
